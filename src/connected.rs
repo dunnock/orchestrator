@@ -5,11 +5,11 @@ use anyhow::anyhow;
 use crossbeam::channel;
 use futures::future::{try_join_all, FusedFuture, FutureExt};
 use futures::{pin_mut, select};
+use ipc_channel::ipc::{IpcReceiverSet, IpcSelectionResult};
 use log::{error, info};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio::task::JoinHandle;
-use ipc_channel::ipc::{IpcReceiverSet, IpcSelectionResult};
 
 type TryAllPin = Pin<Box<dyn FusedFuture<Output = anyhow::Result<Vec<()>>>>>;
 
@@ -114,23 +114,25 @@ where
     }
 
     /// Forward all messages received to topic to module bridge b_out
-    /// This method only configures route, does not spawn handler. 
+    /// This method only configures route, does not spawn handler.
     /// After route configuration done handler shall be started with `pipe_routes()`
     /// - topic name of topic for incoming messages
     /// - b_out name of outgoing bridge from Self::bridges
-    pub fn route_topic_to_bridge(
-        &mut self,
-        topic: &str,
-        b_out: &str,
-    ) -> anyhow::Result<()> {
+    pub fn route_topic_to_bridge(&mut self, topic: &str, b_out: &str) -> anyhow::Result<()> {
         info!("setting communication topic {} -> {}", topic, b_out);
         let tx: Sender = self.take_bridge_tx(b_out)?;
         match self.routes.as_mut() {
             Some(r) => match r.get_mut(topic) {
-                Some(bridges) => bridges.push(tx) ,
-                None => { r.insert(topic.to_owned(), vec![tx]); }
+                Some(bridges) => bridges.push(tx),
+                None => {
+                    r.insert(topic.to_owned(), vec![tx]);
+                }
             },
-            None => return Err(anyhow::anyhow!("cannot change routes after orchestrator started"))
+            None => {
+                return Err(anyhow::anyhow!(
+                    "cannot change routes after orchestrator started"
+                ))
+            }
         };
         Ok(())
     }
@@ -150,7 +152,9 @@ where
                 names.insert(id, name.to_string());
             }
         }
-        let routes = self.routes.take()
+        let routes = self
+            .routes
+            .take()
             .ok_or_else(|| anyhow::anyhow!("routes were not configured"))?;
 
         let handle = tokio::task::spawn_blocking(move || {
@@ -161,26 +165,45 @@ where
                 };
                 for event in results {
                     match event {
-                         IpcSelectionResult::MessageReceived(id, message) => {
-                            let msg: Message = message.to()
-                                .unwrap_or_else(|err| todo!("receiving message from {:?} failed: {}", names.get(&id), err));
-                            let senders = routes.get(&msg.topic)
-                                .unwrap_or_else(|| todo!("received message from {:?} to topic {} without recepients", names.get(&id), msg.topic));
-                            let except_last = senders.len()-1;
+                        IpcSelectionResult::MessageReceived(id, message) => {
+                            let msg: Message = message.to().unwrap_or_else(|err| {
+                                todo!(
+                                    "receiving message from {:?} failed: {}",
+                                    names.get(&id),
+                                    err
+                                )
+                            });
+                            let senders = routes.get(&msg.topic).unwrap_or_else(|| {
+                                todo!(
+                                    "received message from {:?} to topic {} without recepients",
+                                    names.get(&id),
+                                    msg.topic
+                                )
+                            });
+                            let except_last = senders.len() - 1;
                             //info!("sending message from topic {} to {} senders", msg.topic, senders.len());
                             for (i, tx) in senders[0..except_last].iter().enumerate() {
-                                tx.send(msg.clone()).unwrap_or_else(|err|
-                                    todo!("sending message from topic {} to {} failed: {}", msg.topic, i, err));
-                            };
+                                tx.send(msg.clone()).unwrap_or_else(|err| {
+                                    todo!(
+                                        "sending message from topic {} to {} failed: {}",
+                                        msg.topic,
+                                        i,
+                                        err
+                                    )
+                                });
+                            }
                             let topic = msg.topic.clone();
-                            senders.last().unwrap().send(msg).unwrap_or_else(|err|
-                                todo!("sending message from topic {} to last sender failed: {}", topic, err));
-                        
-                         },
-                         IpcSelectionResult::ChannelClosed(id) => {
-                             error!("Channel from {:?} closed...", names.get(&id));
-                         }
-
+                            senders.last().unwrap().send(msg).unwrap_or_else(|err| {
+                                todo!(
+                                    "sending message from topic {} to last sender failed: {}",
+                                    topic,
+                                    err
+                                )
+                            });
+                        }
+                        IpcSelectionResult::ChannelClosed(id) => {
+                            error!("Channel from {:?} closed...", names.get(&id));
+                        }
                     }
                 }
             }
@@ -188,7 +211,6 @@ where
         self.pipes.push(handle);
         Ok(())
     }
-
 
     /// Run processes to completion
     pub async fn run(self) -> anyhow::Result<()> {
