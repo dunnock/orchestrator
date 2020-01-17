@@ -3,8 +3,8 @@
 //!
 //! # Usage
 //! ```
-//! use orchestrator::message::Message;
-//! let msg = Message { topic: 0u32, data: vec![1,2,3,4] };
+//! use ipc_orchestrator::message::Message;
+//! let msg = Message { topic: "my_topic".to_owned(), data: vec![1,2,3,4] };
 //! ```
 
 use serde::{Deserialize, Serialize};

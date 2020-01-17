@@ -214,13 +214,20 @@ where
 
     /// Run processes to completion
     pub async fn run(self) -> anyhow::Result<()> {
-        let pipes = try_join_all(self.pipes).fuse();
-        pin_mut!(pipes);
-        select!(
-            res = pipes => should_not_complete!("channels", res) as anyhow::Result<()>,
-            res = self.processes => should_not_complete!("processes", res),
-            res = self.loggers => should_not_complete!("logs", res),
-        )
+        if self.pipes.len() > 0 {
+            let pipes = try_join_all(self.pipes).fuse();
+            pin_mut!(pipes);
+            select!(
+                res = pipes => should_not_complete!("channels", res) as anyhow::Result<()>,
+                res = self.loggers => should_not_complete!("logs", res),
+                res = self.processes => should_not_complete!("processes", res),
+            )
+        } else {
+            select!(
+                res = self.loggers => should_not_complete!("logs", res),
+                res = self.processes => should_not_complete!("processes", res),
+            )
+        }
     }
 }
 

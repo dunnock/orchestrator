@@ -1,16 +1,20 @@
 #![allow(clippy::unnecessary_mut_passed)]
 //! Opinionated orchestrator for services which communicate via IPC and are not expected to exit
 //! It allows to start and control processes, handling all the necessary boilerplate:
+//! - Running within async runtime
 //! - Uses tokio::process::Command with predefined params
 //!   to execute commands
 //! - Uses log with info+ levels to
 //! - Uses ipc-channel to establish communication from and to processes
 //! ```
 //! use tokio::process::{Command};
-//! use orchestrator::orchestrator;
-//! let mut orchestrator = orchestrator().ipc(false);
-//! orchestrator.start("start", &mut Command::new("set"));
-//! orchestrator.connect();
+//! use ipc_orchestrator::orchestrator;
+//! // from within async runtime:
+//! # tokio::runtime::Runtime::new().unwrap().block_on(async {
+//!     let mut orchestrator = orchestrator().ipc(false);
+//!     orchestrator.start("start", &mut Command::new("echo"));
+//!     orchestrator.connect().await
+//! # });
 //! ```
 
 mod channel;
@@ -23,7 +27,7 @@ mod orchestrator;
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use tokio::process::Child;
 
-pub use orchestrator::orchestrator;
+pub use orchestrator::{orchestrator, Orchestrator};
 
 /// Channel for duplex communication via IPC
 pub type Channel = channel::Channel<message::Message>;

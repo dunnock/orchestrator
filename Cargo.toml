@@ -1,5 +1,5 @@
 [package]
-name = "orchestrator"
+name = "ipc-orchestrator"
 version = "0.3.0"
 authors = ["Maksym Vorobiov <maxim.vorobjov@gmail.com>"]
 edition = "2018"
