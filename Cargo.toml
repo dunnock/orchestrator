@@ -6,6 +6,9 @@ edition = "2018"
 license = "MIT"
 description = "Orchestion of command line processes for local dev usage with IPC communication"
 repository = "https://github.com/dunnock/orchestrator/"
+documentation = "https://docs.rs/ipc-orchestrator"
+readme = "README.md"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
