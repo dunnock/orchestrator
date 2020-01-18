@@ -1,21 +1,24 @@
-use tokio::process::{Command};
 use ipc_orchestrator::orchestrator;
+use tokio::process::Command;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-	init_log_engine();
+    init_log_engine();
 
     let mut orchestrator = orchestrator().ipc(true);
 
     // Start pipeline: generate random f64 [0;1) -> sum -> write to stdout every 10_000 times
     let mut cmd = Command::new("cargo");
-    orchestrator.start("generate", cmd.arg("run").arg("--example=generate"))
+    orchestrator
+        .start("generate", cmd.arg("run").arg("--example=generate"))
         .expect("failed to start generate");
     let mut cmd = Command::new("cargo");
-    orchestrator.start("sum", cmd.arg("run").arg("--example=sum"))
+    orchestrator
+        .start("sum", cmd.arg("run").arg("--example=sum"))
         .expect("failed to start sum");
     let mut cmd = Command::new("cargo");
-    orchestrator.start("write", cmd.arg("run").arg("--example=write"))
+    orchestrator
+        .start("write", cmd.arg("run").arg("--example=write"))
         .expect("failed to start write");
 
     // Connect log handlers and IPC handlers
@@ -34,8 +37,6 @@ async fn main() -> anyhow::Result<()> {
         _ => Ok(()),
     }
 }
-
-
 
 fn init_log_engine() {
     let mut builder = pretty_env_logger::formatted_timed_builder();

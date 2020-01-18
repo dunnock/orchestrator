@@ -158,53 +158,55 @@ where
             .take()
             .ok_or_else(|| anyhow::anyhow!("routes were not configured"))?;
 
-        let handle = tokio::task::spawn_blocking(move || {
-            loop {
-                let results = match ipc_receiver_set.select() {
-                    Ok(results) => results,
-                    Err(err) => todo!("receiving message failed: {}", err),
-                };
-                for event in results {
-                    match event {
-                        IpcSelectionResult::MessageReceived(id, message) => {
-                            let msg: Message = message.to().unwrap_or_else(|err| {
+        let handle = tokio::task::spawn_blocking(move || loop {
+            let results = match ipc_receiver_set.select() {
+                Ok(results) => results,
+                Err(err) => todo!("receiving message failed: {}", err),
+            };
+            for event in results {
+                match event {
+                    IpcSelectionResult::MessageReceived(id, message) => {
+                        let msg: Message = message.to().unwrap_or_else(|err| {
+                            todo!(
+                                "receiving message from {:?} failed: {}",
+                                names.get(&id),
+                                err
+                            )
+                        });
+                        let senders = routes.get(&msg.topic).unwrap_or_else(|| {
+                            todo!(
+                                "received message from {:?} to topic {} without recepients",
+                                names.get(&id),
+                                msg.topic
+                            )
+                        });
+                        let except_last = senders.len() - 1;
+                        info!(
+                            "sending message from topic {} to {} senders",
+                            msg.topic,
+                            senders.len()
+                        );
+                        for (i, tx) in senders[0..except_last].iter().enumerate() {
+                            tx.send(msg.clone()).unwrap_or_else(|err| {
                                 todo!(
-                                    "receiving message from {:?} failed: {}",
-                                    names.get(&id),
-                                    err
-                                )
-                            });
-                            let senders = routes.get(&msg.topic).unwrap_or_else(|| {
-                                todo!(
-                                    "received message from {:?} to topic {} without recepients",
-                                    names.get(&id),
-                                    msg.topic
-                                )
-                            });
-                            let except_last = senders.len() - 1;
-                            info!("sending message from topic {} to {} senders", msg.topic, senders.len());
-                            for (i, tx) in senders[0..except_last].iter().enumerate() {
-                                tx.send(msg.clone()).unwrap_or_else(|err| {
-                                    todo!(
-                                        "sending message from topic {} to {} failed: {}",
-                                        msg.topic,
-                                        i,
-                                        err
-                                    )
-                                });
-                            }
-                            let topic = msg.topic.clone();
-                            senders.last().unwrap().send(msg).unwrap_or_else(|err| {
-                                todo!(
-                                    "sending message from topic {} to last sender failed: {}",
-                                    topic,
+                                    "sending message from topic {} to {} failed: {}",
+                                    msg.topic,
+                                    i,
                                     err
                                 )
                             });
                         }
-                        IpcSelectionResult::ChannelClosed(id) => {
-                            error!("Channel from {:?} closed...", names.get(&id));
-                        }
+                        let topic = msg.topic.clone();
+                        senders.last().unwrap().send(msg).unwrap_or_else(|err| {
+                            todo!(
+                                "sending message from topic {} to last sender failed: {}",
+                                topic,
+                                err
+                            )
+                        });
+                    }
+                    IpcSelectionResult::ChannelClosed(id) => {
+                        error!("Channel from {:?} closed...", names.get(&id));
                     }
                 }
             }

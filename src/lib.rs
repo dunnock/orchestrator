@@ -57,13 +57,13 @@ pub const IPC_SERVER_ENV_VAR: &'static str = "IPC_SERVER";
 
 /// This is helper function for implementing child processes
 /// Child process will automatically connect to the IPC server
-/// passed in the env var "IPC_SERVER". 
+/// passed in the env var "IPC_SERVER".
 /// This env var is injected by orchestrator.
 /// Execution blocks until connected
-/// 
+///
 /// TODO: move to separate client library or set features to exclude all the other unnecessary code
 pub fn connect_ipc_server() -> anyhow::Result<Channel> {
-	let ipc_output = std::env::var(IPC_SERVER_ENV_VAR)?;
+    let ipc_output = std::env::var(IPC_SERVER_ENV_VAR)?;
     println!("Connecting to server: {}", ipc_output);
     let tx = IpcSender::connect(ipc_output.clone())?;
     let (ch1, ch2) = Channel::duplex()?;
