@@ -53,7 +53,7 @@ pub struct Bridge {
     pub name: String,
 }
 
-pub const IPC_SERVER_ENV_VAR: &'static str = "IPC_SERVER";
+pub const IPC_SERVER_ENV_VAR: &str = "IPC_SERVER";
 
 /// This is helper function for implementing child processes
 /// Child process will automatically connect to the IPC server
