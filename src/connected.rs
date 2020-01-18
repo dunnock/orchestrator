@@ -181,7 +181,7 @@ where
                             )
                         });
                         let except_last = senders.len() - 1;
-                        info!(
+                        trace!(
                             "sending message from topic {} to {} senders",
                             msg.topic,
                             senders.len()
