@@ -119,7 +119,7 @@ where
 
         cmd.kill_on_drop(true).stdout(Stdio::piped());
         if self.ipc {
-            cmd.arg(format!("--orchestrator-ch={}", server_name));
+            cmd.env("IPC_SERVER", server_name);
         }
         if self.rust_backtrace {
             cmd.env("RUST_BACKTRACE", "1");

@@ -6,7 +6,7 @@ use crossbeam::channel;
 use futures::future::{try_join_all, FusedFuture, FutureExt};
 use futures::{pin_mut, select};
 use ipc_channel::ipc::{IpcReceiverSet, IpcSelectionResult};
-use log::{error, info};
+use log::{error, info, trace};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio::task::JoinHandle;
@@ -148,6 +148,7 @@ where
         let bridge_names: Vec<String> = self.bridges.keys().cloned().collect();
         for name in bridge_names {
             if let Ok(recv) = self.take_bridge_rx(&name) {
+                info!("setting up receiver {}", name);
                 let id = ipc_receiver_set.add(recv)?;
                 names.insert(id, name.to_string());
             }
@@ -181,7 +182,7 @@ where
                                 )
                             });
                             let except_last = senders.len() - 1;
-                            //info!("sending message from topic {} to {} senders", msg.topic, senders.len());
+                            info!("sending message from topic {} to {} senders", msg.topic, senders.len());
                             for (i, tx) in senders[0..except_last].iter().enumerate() {
                                 tx.send(msg.clone()).unwrap_or_else(|err| {
                                     todo!(
