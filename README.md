@@ -12,7 +12,7 @@ use tokio::process::{Command};
 use ipc_orchestrator::orchestrator;
 
 tokio::runtime::Runtime::new().unwrap().block_on(async {
-	let mut orchestrator = orchestrator().ipc(false);
+	let mut orchestrator = orchestrator();
     orchestrator.start("start", &mut Command::new("echo"));
     orchestrator.connect().await
 });

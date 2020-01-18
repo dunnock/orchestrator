@@ -1,27 +1,27 @@
 //! Opinionated orchestrator for services which communicate via IPC and are not expected to exit
-//! 
+//!
 //! It allows to start and control processes, handling all the necessary boilerplate:
 //! - Running within async runtime
 //! - Uses tokio::process::Command with predefined params
 //!   to execute commands
 //! - Uses log with info+ levels to
 //! - Uses ipc-channel to establish communication from and to processes
-//! 
+//!
 //! # Panicing
-//! 
+//!
 //! Orchestrator will panic if .connect() called outside of async runtime as it spawns handlers.
-//! 
+//!
 //! # Example
-//! 
+//!
 //! This example shows how Orchestrator allows to add custom handlers for process stdout:
-//! 
+//!
 //! ```
 //! use tokio::process::{Command, ChildStdout};
 //! use ipc_orchestrator::Orchestrator;
-//! 
+//!
 //! use std::sync::atomic::{AtomicBool, Ordering};
 //! static CALLED: AtomicBool = AtomicBool::new(false);
-//! 
+//!
 //! use tokio::io::{AsyncBufReadExt, BufReader};
 //! async fn mock_log_handler(reader: ChildStdout, name: String) -> anyhow::Result<()> {
 //!    let mut reader = BufReader::new(reader).lines();
@@ -29,7 +29,7 @@
 //!    CALLED.store(true, Ordering::Relaxed);
 //!    Ok(())
 //! }
-//! 
+//!
 //! // from within async runtime:
 //! # tokio::runtime::Runtime::new().unwrap().block_on(async {
 //!     let mut orchestrator = Orchestrator::from_handlers(mock_log_handler).ipc(false);
@@ -43,7 +43,6 @@
 //!     assert!(CALLED.load(Ordering::Relaxed));
 //! # });
 //! ```
-
 
 use crate::connected::ConnectedOrchestrator;
 use crate::logger::default_log_handler;
