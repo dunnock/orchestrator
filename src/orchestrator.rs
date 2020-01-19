@@ -229,6 +229,7 @@ async fn ipc_handler(server: IpcOneShotServer<Channel>, name: String) -> anyhow:
         .await
 }
 
+#[allow(dead_code)]
 fn never_exit_process_handler(p: Process) -> BFR<()> {
     let Process { child, name } = p;
     let name1 = name.clone();

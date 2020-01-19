@@ -233,24 +233,31 @@ where
     /// though it might use excessive memory to store not processed messages.
     pub fn pipe_routes_via_crossbeam(&mut self) -> anyhow::Result<()> {
         info!("starting communication thread");
-        let mut ipc_receiver_set = IpcReceiverSet::new().unwrap();
-        let mut names: HashMap<u64, String> = HashMap::new();
-        let bridge_names: Vec<String> = self.bridges.keys().cloned().collect();
-        for name in bridge_names {
-            if let Ok(recv) = self.take_bridge_rx(&name) {
-                info!("setting up receiver {}", name);
-                let id = ipc_receiver_set.add(recv)?;
-                names.insert(id, name.to_string());
-            }
-        }
         let routes = self
             .routes
             .take()
             .ok_or_else(|| anyhow::anyhow!("routes were not configured"))?;
         let (tx, rx) = crossbeam::channel::unbounded();
 
+        let bridge_names: Vec<String> = self.bridges.keys().cloned().collect();
+        for name in bridge_names {
+            let tx = tx.clone();
+            if let Ok(ipc) = self.take_bridge_rx(&name) {
+                info!("setting up receiver {}", name);
+                let handle = tokio::task::spawn_blocking(move || loop {
+                    let msg: Message = ipc
+                        .recv()
+                        .unwrap_or_else(|err| todo!("receiving message from {} failed: {}", name, err));
+                    tx.send(msg).unwrap_or_else(|err| {
+                        todo!("sending message from {} failed: {}", name, err)
+                    });
+                });
+                self.pipes.push(handle);
+            }
+        }
+
         // Spawn thread receiving messages from processes to topics
-        let handle1 = tokio::task::spawn_blocking(move || loop {
+        /*let handle1 = tokio::task::spawn_blocking(move || loop {
             let results = match ipc_receiver_set.select() {
                 Ok(results) => results,
                 Err(err) => todo!("receiving message failed: {}", err),
@@ -281,7 +288,7 @@ where
                 }
             }
         });
-        self.pipes.push(handle1);
+        self.pipes.push(handle1);*/
 
         // Spawn thread sending messages from topics to processes
         let handle2 = tokio::task::spawn_blocking(move || loop {
@@ -304,8 +311,8 @@ where
                         err
                     )
                 });
-            }
-            let topic = msg.topic.clone();
+            };
+            let topic = msg.topic.clone(); // TODO - see if it impacting perf
             senders.last().unwrap().send(msg).unwrap_or_else(|err| {
                 todo!(
                     "sending message from topic {} to last sender failed: {}",
