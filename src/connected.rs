@@ -1,5 +1,5 @@
 use crate::message::Message;
-use crate::should_not_complete;
+use crate::{may_complete, never_fail, should_not_complete};
 use crate::{Bridge, Receiver, Sender};
 use anyhow::anyhow;
 use crossbeam::channel;
@@ -137,10 +137,12 @@ where
         Ok(())
     }
 
-    /// Build a pipe from modules b_in to b_out
-    /// Spawns pipe handler in a tokio blocking task thread
-    /// - b_in name of incoming bridge from Self::bridges
-    /// - b_out name of outgoing bridge from Self::bridges
+    /// Spawn router to process messages subscriptions built with `route_topic_to_bridge`
+    /// Spawns handler in a tokio blocking task thread.
+    ///
+    /// # Might block
+    /// This method is not using crossbeam as delivery buffer, hence should use less memory,
+    /// though it might block if one of channels is not being processed
     pub fn pipe_routes(&mut self) -> anyhow::Result<()> {
         info!("starting communication thread");
         let mut ipc_receiver_set = IpcReceiverSet::new().unwrap();
@@ -215,21 +217,132 @@ where
         Ok(())
     }
 
+    /// Spawn router to process messages subscriptions built with `route_topic_to_bridge`
+    /// Spawns handler in 2 tokio blocking task threads using intermediate unbound crossbeam channel.
+    ///
+    /// Benefits:
+    /// - Does not block if recipient blocking accepting messages.
+    /// - Since it is not blocking it alows to increase performance during high load.
+    ///
+    /// Downsides:
+    /// - Might grow on memory
+    /// - When error happen on recipient's side debugging is more complicated as information about sender is not preserved in the log.
+    ///
+    /// # Might grow on memory
+    /// This method is using crossbeam as delivery buffer, hence it won't block,
+    /// though it might use excessive memory to store not processed messages.
+    pub fn pipe_routes_via_crossbeam(&mut self) -> anyhow::Result<()> {
+        info!("starting communication thread");
+        let mut ipc_receiver_set = IpcReceiverSet::new().unwrap();
+        let mut names: HashMap<u64, String> = HashMap::new();
+        let bridge_names: Vec<String> = self.bridges.keys().cloned().collect();
+        for name in bridge_names {
+            if let Ok(recv) = self.take_bridge_rx(&name) {
+                info!("setting up receiver {}", name);
+                let id = ipc_receiver_set.add(recv)?;
+                names.insert(id, name.to_string());
+            }
+        }
+        let routes = self
+            .routes
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("routes were not configured"))?;
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Spawn thread receiving messages from processes to topics
+        let handle1 = tokio::task::spawn_blocking(move || loop {
+            let results = match ipc_receiver_set.select() {
+                Ok(results) => results,
+                Err(err) => todo!("receiving message failed: {}", err),
+            };
+            for event in results {
+                match event {
+                    IpcSelectionResult::MessageReceived(id, message) => {
+                        let msg: Message = message.to().unwrap_or_else(|err| {
+                            todo!(
+                                "receiving message from {:?} failed: {}",
+                                names.get(&id),
+                                err
+                            )
+                        });
+                        let topic = msg.topic.clone();
+                        tx.send(msg).unwrap_or_else(|err| {
+                            todo!(
+                                "sending internal message from {:?} to topic {} failed: {}",
+                                names.get(&id),
+                                topic,
+                                err
+                            )
+                        });
+                    }
+                    IpcSelectionResult::ChannelClosed(id) => {
+                        error!("Channel from {:?} closed...", names.get(&id));
+                    }
+                }
+            }
+        });
+        self.pipes.push(handle1);
+
+        // Spawn thread sending messages from topics to processes
+        let handle2 = tokio::task::spawn_blocking(move || loop {
+            let msg = rx.recv()?;
+            let senders = routes.get(&msg.topic).unwrap_or_else(|| {
+                todo!("received message to topic {} without recepients", msg.topic)
+            });
+            let except_last = senders.len() - 1;
+            trace!(
+                "sending message from topic {} to {} senders",
+                msg.topic,
+                senders.len()
+            );
+            for (i, tx) in senders[0..except_last].iter().enumerate() {
+                tx.send(msg.clone()).unwrap_or_else(|err| {
+                    todo!(
+                        "sending message from topic {} to {} failed: {}",
+                        msg.topic,
+                        i,
+                        err
+                    )
+                });
+            }
+            let topic = msg.topic.clone();
+            senders.last().unwrap().send(msg).unwrap_or_else(|err| {
+                todo!(
+                    "sending message from topic {} to last sender failed: {}",
+                    topic,
+                    err
+                )
+            });
+        });
+        self.pipes.push(handle2);
+        Ok(())
+    }
+
     /// Run processes to completion
     pub async fn run(self) -> anyhow::Result<()> {
-        if self.pipes.is_empty() {
-            select!(
-                res = self.loggers => should_not_complete!("logs", res),
-                res = self.processes => should_not_complete!("processes", res),
-            )
-        } else {
-            let pipes = try_join_all(self.pipes).fuse();
-            pin_mut!(pipes);
-            select!(
-                res = pipes => should_not_complete!("channels", res) as anyhow::Result<()>,
-                res = self.loggers => should_not_complete!("logs", res),
-                res = self.processes => should_not_complete!("processes", res),
-            )
+        let Self {
+            pipes,
+            mut loggers,
+            mut processes,
+            ..
+        } = self;
+        let skip_pipes = pipes.is_empty();
+        let pipes = try_join_all(pipes).fuse();
+        pin_mut!(pipes);
+
+        loop {
+            if skip_pipes {
+                select!(
+                    res = loggers => should_not_complete!("logs", res),
+                    res = processes => should_not_complete!("processes", res),
+                )
+            } else {
+                select!(
+                    res = pipes => should_not_complete!("channels", res) as anyhow::Result<()>,
+                    res = loggers => never_fail!("logs", res),
+                    res = processes => may_complete!("processes", res),
+                )
+            }?
         }
     }
 }

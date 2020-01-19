@@ -166,7 +166,7 @@ where
         let processes: Vec<BFR<()>> = processes
             .drain()
             .map(|(_k, v)| v)
-            .map(never_exit_process_handler)
+            .map(may_exit_process_handler)
             .collect();
 
         // Main future executor, had to implement due to customized pipeline
@@ -236,6 +236,24 @@ fn never_exit_process_handler(p: Process) -> BFR<()> {
         child
             .inspect(move |status| warn!(target: &name1, "exiting {:?}", status))
             .map(move |status| match status {
+                Ok(n) => Err(anyhow!(
+                    "process `{}` finish with {}, closing pipeline",
+                    name,
+                    n
+                )),
+                Err(err) => Err(err.into()),
+            }),
+    )
+}
+
+fn may_exit_process_handler(p: Process) -> BFR<()> {
+    let Process { child, name } = p;
+    let name1 = name.clone();
+    Box::pin(
+        child
+            .inspect(move |status| warn!(target: &name1, "exiting {:?}", status))
+            .map(move |status| match status {
+                Ok(n) if n.success() => Ok(()),
                 Ok(n) => Err(anyhow!(
                     "process `{}` finish with {}, closing pipeline",
                     name,

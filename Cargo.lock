@@ -323,7 +323,7 @@ dependencies = [
 
 [[package]]
 name = "ipc-orchestrator"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow 1.0.26 (registry+https://github.com/rust-lang/crates.io-index)",
  "async-trait 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",

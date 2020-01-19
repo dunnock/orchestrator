@@ -28,13 +28,14 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Route IPC messages
-    orchestra.pipe_bridges("generate", "sum")?;
-    orchestra.pipe_bridges("sum", "write")?;
+    orchestra.route_topic_to_bridge("generate", "sum")?;
+    orchestra.route_topic_to_bridge("sum", "write")?;
+    orchestra.pipe_routes_via_crossbeam()?;
 
     // Killing it hard since some spawned futures might still run
     match orchestra.run().await {
         Err(_) => std::process::exit(1),
-        _ => Ok(()),
+        Ok(_) => Ok(()),
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "ipc-orchestrator"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Maksym Vorobiov <maxim.vorobjov@gmail.com>"]
 edition = "2018"
 license = "MIT"
