@@ -245,9 +245,9 @@ where
             if let Ok(ipc) = self.take_bridge_rx(&name) {
                 info!("setting up receiver {}", name);
                 let handle = tokio::task::spawn_blocking(move || loop {
-                    let msg: Message = ipc
-                        .recv()
-                        .unwrap_or_else(|err| todo!("receiving message from {} failed: {}", name, err));
+                    let msg: Message = ipc.recv().unwrap_or_else(|err| {
+                        todo!("receiving message from {} failed: {}", name, err)
+                    });
                     tx.send(msg).unwrap_or_else(|err| {
                         todo!("sending message from {} failed: {}", name, err)
                     });
@@ -311,7 +311,7 @@ where
                         err
                     )
                 });
-            };
+            }
             let topic = msg.topic.clone(); // TODO - see if it impacting perf
             senders.last().unwrap().send(msg).unwrap_or_else(|err| {
                 todo!(
